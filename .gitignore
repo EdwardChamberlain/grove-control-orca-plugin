@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+.ruff_cache/
+*.egg-info/
+src/grove_control_orca_plugin/_version.py
+src/grove_control_orca_plugin/.grove-staging/

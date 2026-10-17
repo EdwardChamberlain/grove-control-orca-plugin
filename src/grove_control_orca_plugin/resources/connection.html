@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grove Control</title>
+  <style>
+    body { padding: 16px; }
+    h1 { margin-top: 0; font-size: 1.35em; }
+    h2 { font-size: 1.1em; margin: 0 0 10px; }
+    p { line-height: 1.45; }
+    .muted { color: var(--orca-muted); }
+    section { margin-top: 18px; padding: 14px; border: 1px solid var(--orca-border); border-radius: 8px; }
+    label { display: block; margin: 0 0 6px; }
+    input { box-sizing: border-box; width: 100%; padding: 8px; }
+    textarea { box-sizing: border-box; width: 100%; margin-top: 10px; font: 12px/1.4 monospace; }
+    details { margin-top: 18px; }
+    summary { cursor: pointer; }
+    button { padding: 8px 12px; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    #status, #receipt { white-space: pre-wrap; overflow-wrap: anywhere; }
+    #status { min-height: 22px; }
+    .ready { color: var(--orca-success, #23bd72); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Grove Control</h1>
+  <p id="plugin-version" class="muted"></p>
+  <p class="muted">Configure your Grove connection here. To send a sliced plate, use Orca's native <strong>Print plate</strong> button with a preset assigned to the Grove Queue agent.</p>
+
+  <section>
+    <h2>Connection</h2>
+    <form id="connection">
+      <label for="grove-url">Grove URL</label>
+      <input id="grove-url" type="url" placeholder="https://grove.example.com" required autocomplete="url">
+      <div class="row">
+        <button id="save" type="submit">Save URL</button>
+        <button id="sign-in" type="button">Sign in</button>
+        <button id="sign-out" type="button" disabled>Sign out</button>
+        <button id="check" type="button" disabled>Check connection</button>
+      </div>
+    </form>
+    <p id="account">Not signed in</p>
+    <p id="availability" class="muted">Grove is not ready for Print plate.</p>
+    <p class="muted">Sign in with a Grove user account. Upload permission is checked when Orca sends the plate.</p>
+  </section>
+
+  <details>
+    <summary>Orca connection diagnostics</summary>
+    <p class="muted">After a Send timeout, copy this information to report where the connection stopped.</p>
+    <textarea id="agent-diagnostics" rows="14" readonly aria-label="Orca connection diagnostics"></textarea>
+  </details>
+
+  <section>
+    <h2>Activity</h2>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p id="receipt" role="status" aria-live="polite"></p>
+  </section>
+
+  <script>
+    const url = document.getElementById('grove-url');
+    let state = {};
+    function send(type, data = {}) { window.orca.postMessage({type, ...data}); }
+    function render(data) {
+      state = data;
+      document.getElementById('plugin-version').textContent = `Plugin ${data.plugin_version || 'unknown'}`;
+      const diagnostics = document.getElementById('agent-diagnostics');
+      if (document.activeElement !== diagnostics) {
+        diagnostics.value = JSON.stringify(data.agent_diagnostics || {
+          plugin_version: data.plugin_version,
+          message: 'The Grove Queue agent has not been initialized.'
+        }, null, 2);
+      }
+      if (document.activeElement !== url) url.value = data.grove_url || '';
+      url.disabled = !!data.busy;
+      document.getElementById('save').disabled = !!data.busy;
+      document.getElementById('sign-in').disabled = !!data.busy || !data.grove_url || !!data.account;
+      document.getElementById('sign-out').disabled = !!data.busy || !data.account;
+      document.getElementById('check').disabled = !!data.busy || !data.account;
+      document.getElementById('account').textContent = data.account
+        ? `Signed in as ${data.account.username}` : 'Not signed in';
+      const availability = document.getElementById('availability');
+      availability.textContent = data.ready_for_print
+        ? 'Grove is connected and ready for Print plate.'
+        : 'Grove is not ready for Print plate. Save the URL, sign in, and check the connection.';
+      availability.className = data.ready_for_print ? 'ready' : 'muted';
+      document.getElementById('status').textContent = data.message || '';
+      const result = data.last_submission;
+      document.getElementById('receipt').textContent = result
+        ? [result.message, result.library_file_id ? `Grove file #${result.library_file_id}` : '',
+           result.queue_item_ids.length ? `Queue items: ${result.queue_item_ids.join(', ')}` : '']
+            .filter(Boolean).join('\n')
+        : '';
+    }
+    document.getElementById('connection').onsubmit = event => {
+      event.preventDefault();
+      send('configure', {grove_url: url.value});
+    };
+    document.getElementById('sign-in').onclick = () => {
+      if (url.value.trim().replace(/\/+$/, '') !== state.grove_url) {
+        document.getElementById('status').textContent = 'Save the Grove URL before signing in.';
+        return;
+      }
+      send('sign_in');
+    };
+    document.getElementById('sign-out').onclick = () => send('sign_out');
+    document.getElementById('check').onclick = () => send('check_connection');
+    window.orca.onMessage(data => {
+      if (data.type === 'state') render(data);
+      if (data.type === 'notice') document.getElementById('status').textContent = data.message;
+    });
+    send('ready');
+    window.setInterval(() => send('refresh'), 2000);
+  </script>
+</body>
+</html>
