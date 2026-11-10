@@ -68,6 +68,8 @@ The Grove-side hosted login and Print form bridge, along with receipt changes, a
 
 ## Development
 
+Install Node.js to run the JavaScript bridge test. Pull requests to `main` require the **Required CI** check, which runs the tests on Linux, macOS, and Windows and checks lint, formatting, and packaging on Linux.
+
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
@@ -81,11 +83,11 @@ The wheel is pure Python, includes its configuration panel, and has no runtime p
 
 ## Versioning
 
-The package version is derived from Git tags by `hatch-vcs`. Use semantic version tags with a `v` prefix, such as `v0.1.0`. Before a tag is available, builds use the `0.1.7` fallback configured in `pyproject.toml`. The Grove panel displays the loaded version so successive local builds can be distinguished. Builds generate `src/grove_control_orca_plugin/_version.py`; do not edit that generated file.
+The package version is derived from Git tags by `hatch-vcs`. Use tags in `vMAJOR.MINOR.PATCH` form, such as `v0.1.0`. Before a tag is available, builds use the `0.1.7` fallback configured in `pyproject.toml`. The Grove panel displays the loaded version so successive local builds can be distinguished. Builds generate `src/grove_control_orca_plugin/_version.py`; do not edit that generated file.
 
 ## Publishing a release
 
-Push a version tag such as `v0.1.8` to run the **Publish plugin** workflow. It builds and checks the wheel and source distribution, confirms their versions match the tag, then attaches both files to a GitHub Release. The initial `v0.1.0` release and tags with a prerelease suffix, such as `v0.2.0-beta.1`, are marked as prereleases. If the release already exists, rerunning the workflow replaces those two assets.
+Push a version tag such as `v0.1.8` to run the **Publish plugin** workflow. After CI passes, the workflow builds the wheel and source distribution, confirms their versions match the tag, and attaches both files to a GitHub prerelease. If the release already exists, rerunning the workflow marks it as a prerelease and replaces both assets.
 
 ```sh
 git tag v0.1.8

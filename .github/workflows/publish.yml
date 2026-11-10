@@ -3,19 +3,26 @@ name: Publish plugin
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -68,19 +75,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          release_flags=()
-          if [[ "$RELEASE_TAG" == "v0.1.0" || "$RELEASE_TAG" == *-* ]]; then
-            release_flags+=(--prerelease)
-          fi
-
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [[ ${#release_flags[@]} -gt 0 ]]; then
-              gh release edit "$RELEASE_TAG" "${release_flags[@]}"
-            fi
+            gh release edit "$RELEASE_TAG" --prerelease
             gh release upload "$RELEASE_TAG" dist/* --clobber
           else
             gh release create "$RELEASE_TAG" dist/* \
-              "${release_flags[@]}" \
+              --prerelease \
               --title "$RELEASE_TAG" \
               --generate-notes
           fi
