@@ -259,7 +259,7 @@ class Runtime:
         try:
             session = self._session
             if session is None:
-                raise AuthenticationRequired("Sign in from the Grove Control panel before sending a job.")
+                raise AuthenticationRequired("Open Grove in Orca and sign in before sending a job.")
             # GroveClient validates the native archive once, immediately before
             # constructing the upload. Normalize its display name here so the
             # subsequent Print-form handoff uses that same name.

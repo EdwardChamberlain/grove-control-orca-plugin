@@ -4,7 +4,7 @@
 
 The plugin uses Orca's documented `orca.printer_agent.PrinterAgentBase` capability as a LAN adapter named **Grove Queue**. It advertises one logical device and receives the finished sliced archive through `start_local_print()` or, on the applicable Orca path, `start_local_print_with_record()`. It forwards `params.filename` as the unchanged local source path and Orca's 1-based `params.plate_index` into the existing Grove submission service. The Grove upload/display name is derived separately from `params.project_name` and normalized to a safe `.gcode.3mf` filename, with a fallback name when the project name is absent.
 
-After Orca loads the Script capability, a saved Grove URL triggers a background sign-in attempt through Grove's hosted Orca connect page. Grove's existing browser session can return a fresh access token; if that session is missing or expired, the hosted login page is shown. The token remains in Runtime memory and is never persisted in plugin configuration.
+The **Grove** tab uses Orca's Pages capability and shares configuration and connection state with the Grove Control Script capability. After the live agent attaches or the user opens the tab, a saved Grove URL triggers a background sign-in attempt through Grove's hosted Orca connect page. Grove's existing browser session can return a fresh access token; if that session is missing or expired, the hosted login page is shown. The token remains in Runtime memory and is never persisted in plugin configuration.
 
 The native callback returns `0` only after a validated Grove queue receipt. Orca's PrintJob implementation posts its completion event after a non-negative callback result; the plugin has no public API to close Orca's native Send print job dialog itself. Live verification is still needed to confirm the dialog closes in the target build after a confirmed queue submission.
 
@@ -23,7 +23,7 @@ The agent advertises a stable discovered LAN identity:
 
 The user selects/binds this discovered device in Orca. The cloned P1S preset selects Grove Queue as its agent and retains its slicing settings. Host/port fields are not exposed in that preset's Basic information page in the inspected nightly; they belong to Orca's separate physical-printer settings. No manual preset-file editing is required for the discovered-device route.
 
-Orca may prompt for a LAN access code; any non-empty compatibility value such as `grove-queue` is sufficient. The plugin ignores it and never sends it to Grove. The Grove account session comes only from the configuration panel.
+Orca may prompt for a LAN access code; any non-empty compatibility value such as `grove-queue` is sufficient. The plugin ignores it and never sends it to Grove. The user signs in to their Grove account through the **Grove** tab.
 
 Orca's Send dialog requests `get_version` and `pushall` before it may connect the selected LAN device. It can skip the explicit connection when that device is already selected. Supported metadata requests for the exact adapter ID therefore establish its local session and immediately return version/full-status replies. Explicit connections also work; they validate the device ID and loopback host while tolerating an empty or preset-derived port. This adapter never opens a socket.
 
