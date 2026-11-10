@@ -85,7 +85,7 @@ The package version is derived from Git tags by `hatch-vcs`. Use semantic versio
 
 ## Publishing a release
 
-Push a version tag such as `v0.1.8` to run the **Publish plugin** workflow. It builds and checks the wheel and source distribution, confirms their versions match the tag, then attaches both files to a GitHub Release. If the release already exists, rerunning the workflow replaces those two assets.
+Push a version tag such as `v0.1.8` to run the **Publish plugin** workflow. It builds and checks the wheel and source distribution, confirms their versions match the tag, then attaches both files to a GitHub Release. The initial `v0.1.0` release and tags with a prerelease suffix, such as `v0.2.0-beta.1`, are marked as prereleases. If the release already exists, rerunning the workflow replaces those two assets.
 
 ```sh
 git tag v0.1.8
