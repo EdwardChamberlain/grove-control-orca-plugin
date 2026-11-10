@@ -40,7 +40,7 @@ Print-modal changes reach the plugin automatically.
 
 The plugin's dock panel is configuration-only. Its native PrinterAgent callback
 uses `GET /api/v1/auth/status`, `GET /api/v1/auth/me`,
-`POST /api/v1/auth/logout` and `POST /api/v1/library/files`. Queue creation stays
+`POST /api/v1/auth/logout` and `POST /api/v1/library/files?temporary=true`. Queue creation stays
 in Grove. Give print-mode document authentication an in-memory option so it does
 not overwrite a separate remembered browser account or write the bridged token
 to storage. Mount user-dependent providers only after that session is verified.
@@ -53,9 +53,9 @@ to storage. Mount user-dependent providers only after that session is verified.
 - Single/multiple copies and multi-plate/printer submissions return every
   confirmed ID. Partial success and timeouts cannot be reported as full success
   or retried automatically; close/cancel behavior follows the protocol.
-- Cancelling leaves the uploaded file in File Manager. Retain the existing
-  `cleanupLibraryAfterDispatch` policy: automatic source cleanup only for a
-  genuine single queue item with quantity one.
+- Cancelling leaves the uploaded file in Temporary Files until Grove's
+  configured retention period expires. Grove cleans up after dispatch once
+  no other live queue item needs the file. Users can move it out to keep it.
 - The ordinary Grove Print modal still works, and its later UI changes appear
   in Orca without copying UI code into the plugin. Verify authentication,
   framing and bridge delivery in real Orca nightlies on the supported platforms.

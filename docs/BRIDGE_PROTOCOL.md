@@ -69,7 +69,8 @@ changing an established session. Passwords and MFA answers never enter Python.
 ## Print exchange
 
 The plugin first verifies `/auth/status` and `/auth/me`, then uploads with
-`POST /api/v1/library/files`, using `Authorization: Bearer <same user JWT>`.
+`POST /api/v1/library/files?temporary=true`, using `Authorization: Bearer <same user JWT>`.
+Grove manages the uploaded file through its Temporary Files retention and dispatch rules.
 After Grove sends `ready`, the plugin responds:
 
 ```json

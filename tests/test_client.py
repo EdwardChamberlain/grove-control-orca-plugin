@@ -99,7 +99,7 @@ class ClientTests(unittest.TestCase):
             progress = []
             self.assertEqual(self.client.upload(SlicedJob(path), "session-token", progress.append), 42)
         path, headers, body = Handler.requests[-1]
-        self.assertEqual(path, "/grove/api/v1/library/files")
+        self.assertEqual(path, "/grove/api/v1/library/files?temporary=true")
         self.assertEqual(headers["Authorization"], "Bearer session-token")
         self.assertEqual(int(headers["Content-Length"]), len(body))
         self.assertIn('filename="pièce.gcode.3mf"'.encode(), body)
