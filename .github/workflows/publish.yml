@@ -1,0 +1,77 @@
+name: Publish plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Check package metadata and release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python -m twine check dist/*
+          python - <<'PY'
+          import os
+          import tarfile
+          from email.parser import BytesParser
+          from pathlib import Path
+
+          expected_version = os.environ["RELEASE_TAG"].removeprefix("v")
+          wheel, = Path("dist").glob("*.whl")
+          wheel_version = wheel.name.split("-")[1]
+          if wheel_version != expected_version:
+              raise SystemExit(
+                  f"Wheel version {wheel_version} does not match tag {expected_version}"
+              )
+
+          source_distribution, = Path("dist").glob("*.tar.gz")
+          with tarfile.open(source_distribution, "r:gz") as archive:
+              metadata_path = next(
+                  name for name in archive.getnames() if name.endswith("/PKG-INFO")
+              )
+              metadata_file = archive.extractfile(metadata_path)
+              if metadata_file is None:
+                  raise SystemExit("Source distribution is missing PKG-INFO")
+              metadata = BytesParser().parsebytes(metadata_file.read())
+
+          if metadata["Version"] != expected_version:
+              raise SystemExit(
+                  f"Source version {metadata['Version']} does not match tag {expected_version}"
+              )
+          PY
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --title "$RELEASE_TAG" \
+              --generate-notes
+          fi

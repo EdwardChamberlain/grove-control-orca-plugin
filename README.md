@@ -82,3 +82,12 @@ The wheel is pure Python, includes its configuration panel, and has no runtime p
 ## Versioning
 
 The package version is derived from Git tags by `hatch-vcs`. Use semantic version tags with a `v` prefix, such as `v0.1.0`. Before a tag is available, builds use the `0.1.7` fallback configured in `pyproject.toml`. The Grove panel displays the loaded version so successive local builds can be distinguished. Builds generate `src/grove_control_orca_plugin/_version.py`; do not edit that generated file.
+
+## Publishing a release
+
+Push a version tag such as `v0.1.8` to run the **Publish plugin** workflow. It builds and checks the wheel and source distribution, confirms their versions match the tag, then attaches both files to a GitHub Release. If the release already exists, rerunning the workflow replaces those two assets.
+
+```sh
+git tag v0.1.8
+git push origin v0.1.8
+```
