@@ -47,6 +47,14 @@ class PrinterAgentBase:
         pass
 
 
+class PagesCapability:
+    def __init__(self):
+        self.messages = []
+
+    def post_message(self, data):
+        self.messages.append(json.loads(json.dumps(data)))
+
+
 class FakePanel:
     def __init__(self):
         self.messages = []
@@ -80,6 +88,7 @@ class PluginTests(unittest.TestCase):
         self.ui = object()
         orca = types.SimpleNamespace(
             base=object,
+            pages=types.SimpleNamespace(PagesPluginCapabilityBase=PagesCapability),
             script=types.SimpleNamespace(ScriptPluginCapabilityBase=ScriptCapability),
             printer_agent=types.SimpleNamespace(
                 PrinterAgentBase=PrinterAgentBase,
@@ -96,17 +105,21 @@ class PluginTests(unittest.TestCase):
         package().register_capabilities()
         self.script = self.capabilities[0]()
         self.agent = self.capabilities[1]()
+        self.page = self.capabilities[2]()
         self.script.on_load()
         self.script._panel = FakePanel()
+        self.page.on_load()
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "plate.gcode.3mf"
         make_export(self.path)
         self.addCleanup(self.agent.on_unload)
         self.addCleanup(self.script.on_unload)
+        self.addCleanup(self.page.on_unload)
 
-    def test_registers_script_panel_and_stable_native_queue_agent(self):
-        self.assertEqual(len(self.capabilities), 2)
+    def test_registers_grove_tab_script_and_stable_native_queue_agent(self):
+        self.assertEqual(len(self.capabilities), 3)
+        self.assertEqual(self.page.get_name(), "Grove")
         self.assertEqual(self.script.get_name(), "Grove Control")
         self.assertEqual(self.agent.get_name(), "Grove Queue")
         info = self.agent.get_agent_info()
@@ -171,8 +184,8 @@ class PluginTests(unittest.TestCase):
 
         self.assertEqual(queue, [])
 
-    def test_panel_is_connection_configuration_only(self):
-        html = (Path(plugin.__file__).parent / "resources" / "connection.html").read_text("utf-8")
+    def test_tab_is_connection_configuration_only(self):
+        html = self.page.get_ui()
         self.assertIn("Print plate", html)
         self.assertIn("Sign in", html)
         self.assertNotIn('type="file"', html)
@@ -180,10 +193,51 @@ class PluginTests(unittest.TestCase):
         self.assertNotIn("import_begin", html)
 
     def test_configuration_persists_only_the_server_url(self):
-        self.script.on_message(json.dumps({"type": "configure", "grove_url": "https://grove.example/"}))
+        self.page.on_message({"type": "configure", "grove_url": "https://grove.example/"})
         self.assertEqual(self.script.saved, {"grove_url": "https://grove.example"})
         self.assertEqual(plugin.connection_state()["grove_url"], "https://grove.example")
         self.assertFalse(plugin.connection_state()["ready_for_print"])
+        self.assertEqual(self.page.messages[-1], self.script._panel.messages[-1])
+
+    def test_opening_the_tab_restores_the_saved_connection_without_a_live_agent(self):
+        self.script.saved = {"grove_url": "https://grove.example"}
+        self.script.on_load()
+        with (
+            patch.object(plugin.Runtime, "prepare_access") as prepare,
+            patch.object(self.script, "_work") as work,
+        ):
+            self.page.on_message({"type": "ready"})
+            self.page.on_message({"type": "ready"})
+
+        prepare.assert_called_once_with()
+        work.assert_called_once_with(self.script._runtime.sign_in)
+        self.assertEqual(self.page.messages[-1]["grove_url"], "https://grove.example")
+        self.assertFalse(self.page.messages[-1]["orca_connected"])
+
+    def test_tab_refresh_reports_orca_connection_without_publishing_agent_metadata(self):
+        self.agent.set_queue_on_main_fn(lambda _: None)
+        self.agent.connect_printer(types.SimpleNamespace(dev_id=plugin.DEVICE_ID, host=plugin.LAN_HOST))
+        with patch.object(self.agent, "refresh_availability") as refresh:
+            self.page.on_message({"type": "refresh"})
+
+        refresh.assert_not_called()
+        self.assertTrue(self.page.messages[-1]["orca_connected"])
+        self.agent.disconnect_printer()
+        self.page.on_message({"type": "refresh"})
+        self.assertFalse(self.page.messages[-1]["orca_connected"])
+
+    def test_tab_recovers_when_the_script_capability_is_enabled_again(self):
+        self.script.on_unload()
+        self.page.on_message({"type": "ready"})
+        self.assertTrue(self.page.messages[-1]["unavailable"])
+        self.script.on_load()
+        self.page.on_message({"type": "refresh"})
+        self.assertNotIn("unavailable", self.page.messages[-1])
+
+        message_count = len(self.page.messages)
+        self.page.on_unload()
+        self.script._runtime.configure("https://grove.example")
+        self.assertEqual(len(self.page.messages), message_count)
 
     def test_configuration_work_crosses_the_native_audited_entry(self):
         def action():

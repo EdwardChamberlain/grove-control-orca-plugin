@@ -4,7 +4,7 @@ A Python plugin that routes OrcaSlicer's native **Print plate** action to Grove 
 
 ## How it works
 
-- **Grove Control** is a Script capability. Its dock panel stores the Grove URL and provides sign-in, sign-out, and connection status.
+- **Grove** is a main-window tab in Orca. It provides server setup, sign-in, connection status, and submission activity.
 - **Grove Queue** is a LAN `PrinterAgent` adapter. The printer preset selects this agent; its discovered Grove Queue device supplies a stable loopback identity. The plugin answers connection and status callbacks and receives the archive through `start_local_print`.
 - Orca needs a small compatibility status to enable its LAN Send workflow. The first prototype is limited to the P1S model (`C12`): its model, FDM, adapter-version, and upload-route status fields are synthetic Orca compatibility values. They do not describe a physical printer or storage device. The loopback address has no listening service and the plugin sends no movement, heater, calibration, or other machine-control commands.
 - The plugin validates the archive, checks the Grove user session, uploads once, and opens Grove's hosted full Print form inside an Orca-owned modal window. Grove owns printer/model selection, readiness, materials, copies, scheduling, print options, and queue creation.
@@ -16,23 +16,23 @@ The PrinterAgent workflow is experimental and off by default in Orca. This LAN a
 ## Setup and use
 
 1. Install and activate the plugin from Orca's **Plugins → Install local plugin** flow.
-2. Open **Plugins**, select **Grove Control**, and run it to open the configuration panel.
+2. Open the **Grove** tab in Orca's main window. If other plugins fill the tab bar, choose **Grove** from the tab overflow menu. On builds without plugin tabs, open **Plugins** and run the **Grove Control** script to open the same controls in a dock panel.
 3. Save your Grove server URL and sign in once. Allow Orca's plugin permission prompts for connecting to that server. These are separate from signing in to Grove. After the URL is saved, the plugin opens Grove's hosted connect flow each time Orca loads it. If Grove recognizes an active browser session, it returns a fresh token automatically; otherwise, its login page appears. The access token stays in memory and is not saved in Orca configuration or window URLs.
 4. Enable **Preferences → Developer → Experimental Features → Use printer agents instead of print hosts**, then restart Orca if it asks.
 5. Clone the **Bambu Lab P1S** printer preset you want to use. Keep the original preset assigned to its normal agent for direct printing.
 6. In the cloned preset's **Basic information → Advanced**, select **Printer Agent: Grove Queue**, enable **Use 3MF instead of G-code**, and leave **Use 3rd-party print host** disabled. Save the preset.
-7. Select the discovered **Grove Queue (LAN)** device through Orca's **Device** tab. If Orca prompts for a LAN access code, enter any non-empty compatibility value such as `grove-queue`. The plugin ignores this value; sign in to Grove only through the Grove Control panel. An entry already available in the Print plate printer selector has already passed this binding step.
+7. Select the discovered **Grove Queue (LAN)** device through Orca's **Device** tab. If Orca prompts for a LAN access code, enter any non-empty compatibility value such as `grove-queue`. The plugin ignores this value. Use the **Grove** tab to sign in to Grove. An entry already available in the Print plate printer selector has already passed this binding step.
 8. Select the cloned preset, slice, and use **Print plate**. Select **Grove Queue** in Orca's printer selector if it is not already selected. The LAN preflight is readiness-only. When you send, allow Orca's read-permission prompt for its temporary sliced archive if shown. The completed archive then uploads to Grove and Grove opens its full job form inside Orca.
 
 The adapter advertises `127.0.0.1:49381` itself. No host or port field needs to be entered in **Basic information**; the earlier setup instructions incorrectly placed those fields there. Orca may ask for metadata before calling the connection callback, so the adapter answers those read-only requests immediately while retaining Grove authentication checks for uploads.
 
 To replace an earlier local build, install the new `.whl` from **Plugins → Install local plugin**, confirm **Overwrite**, then restart Orca so it reloads the package. The plugin version may stay the same for local builds from a checkout without Git tags.
 
-After installing a replacement, restart Orca and check the loaded version in the panel. When a server URL is saved, startup sign-in is queued through Orca's UI dispatcher once the Grove LAN agent attaches. If no Grove preset is active yet, opening the Grove Control panel triggers the same attempt. If Grove's browser session is no longer active, sign in through the Grove window; use **Check connection** before sending if needed. Orca may ask for network and background-thread permissions after replacement. The panel displays the loaded version; **0.1.3** corrects permission handling, **0.1.4** corrects native temporary-archive naming, **0.1.5** requests a modal Print window so it can be used above Orca's modal Send dialog, **0.1.6** adds startup sign-in attempts, and **0.1.7** defers startup sign-in until Orca's UI dispatcher is available.
+After installing a replacement, restart Orca and check the loaded version in the **Grove** tab. When a server URL is saved, startup sign-in is queued through Orca's UI dispatcher once the Grove LAN agent attaches. Opening the **Grove** tab also starts the attempt if it is still pending. If Grove's browser session has expired, sign in through the Grove window. Orca may ask for network and background-thread permissions after replacement.
 
 The first implementation targets the P1S slicing profile to prove the route. Other printer models and filament combinations still need compatibility checks before they are supported.
 
-If **Print plate** still times out, close the Send dialog and expand **Orca connection diagnostics** in the Grove Control panel. Copy the displayed text. It includes the loaded version, metadata request counts, connection callback count, and callback errors; it excludes credentials, filenames, and request payloads. A callback returning successfully confirms it was invoked, while Orca's Send dialog establishes whether it accepted the reply.
+If **Print plate** times out, close the Send dialog and expand **Orca connection diagnostics** in the **Grove** tab. Copy the displayed text. It includes the loaded version, metadata request counts, connection callback count, and callback errors; it excludes credentials, filenames, and request payloads. A callback returning successfully confirms it was invoked, while Orca's Send dialog establishes whether it accepted the reply.
 
 ### Empty callbacks after restarting Orca
 
@@ -46,7 +46,7 @@ Builds through `0.1.4` opened a modeless Print window, which Orca's modal Send d
 
 ### Orca Send print job dialog after queue confirmation
 
-The native callback returns success (`0`) only after the plugin validates Grove's receipt for the submitted file and account. Orca's Print plate job handler uses that return value to post its completion event and close the Send print job dialog. The plugin has no public API to dismiss that native dialog directly. If Grove confirms the queue entry but Orca keeps the dialog open, check the Grove Control panel's **Activity** for a submitted result, then inspect Orca's log: `print_job: send ok.` means the callback completed successfully and points to an Orca dialog/event issue; `print_job: failed, result = ...` means Orca received a failure instead. The native dialog close behavior still needs live verification with the installed build.
+The native callback returns success (`0`) only after the plugin validates Grove's receipt for the submitted file and account. Orca's Print plate job handler uses that return value to post its completion event and close the Send print job dialog. The plugin has no public API to dismiss that native dialog directly. If Grove confirms the queue entry but Orca keeps the dialog open, check **Activity** in the **Grove** tab for a submitted result, then inspect Orca's log: `print_job: send ok.` means the callback completed successfully and points to an Orca dialog/event issue; `print_job: failed, result = ...` means Orca received a failure instead. The native dialog close behavior still needs live verification with the installed build.
 
 ### Orca permission errors when sending
 
@@ -79,11 +79,11 @@ python3 -m venv .venv
 .venv/bin/python -m build --no-isolation
 ```
 
-The wheel is pure Python, includes its configuration panel, and has no runtime pip dependencies. Install `dist/*.whl` through Orca's local plugin installer.
+The wheel is pure Python, includes the Grove tab, and has no runtime pip dependencies. Install `dist/*.whl` through Orca's local plugin installer.
 
 ## Versioning
 
-The package version is derived from Git tags by `hatch-vcs`. Use tags in `vMAJOR.MINOR.PATCH` form, such as `v0.1.0`. Before a tag is available, builds use the `0.1.7` fallback configured in `pyproject.toml`. The Grove panel displays the loaded version so successive local builds can be distinguished. Builds generate `src/grove_control_orca_plugin/_version.py`; do not edit that generated file.
+The package version is derived from Git tags by `hatch-vcs`. Use tags in `vMAJOR.MINOR.PATCH` form, such as `v0.1.0`. Before a tag is available, builds use the `0.1.7` fallback configured in `pyproject.toml`. The **Grove** tab displays the loaded version. Builds generate `src/grove_control_orca_plugin/_version.py`; do not edit that generated file.
 
 ## Publishing a release
 

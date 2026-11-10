@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grove Control</title>
   <style>
-    body { padding: 16px; }
+    body { padding: clamp(16px, 4vw, 40px); }
+    main { max-width: 680px; margin: 0 auto; }
     h1 { margin-top: 0; font-size: 1.35em; }
     h2 { font-size: 1.1em; margin: 0 0 10px; }
     p { line-height: 1.45; }
@@ -25,32 +26,26 @@
   </style>
 </head>
 <body>
+<main>
   <h1>Grove Control</h1>
   <p id="plugin-version" class="muted"></p>
-  <p class="muted">Configure your Grove connection here. To send a sliced plate, use Orca's native <strong>Print plate</strong> button with a preset assigned to the Grove Queue agent.</p>
+  <p class="muted">Connect to Grove, then use <strong>Print plate</strong> with a preset assigned to Grove Queue.</p>
 
   <section>
     <h2>Connection</h2>
     <form id="connection">
       <label for="grove-url">Grove URL</label>
-      <input id="grove-url" type="url" placeholder="https://grove.example.com" required autocomplete="url">
+      <input id="grove-url" type="url" placeholder="https://grove.example.com" required autocomplete="url" disabled>
       <div class="row">
-        <button id="save" type="submit">Save URL</button>
-        <button id="sign-in" type="button">Sign in</button>
+        <button id="save" type="submit" disabled>Save URL</button>
+        <button id="sign-in" type="button" disabled>Sign in</button>
         <button id="sign-out" type="button" disabled>Sign out</button>
         <button id="check" type="button" disabled>Check connection</button>
       </div>
     </form>
-    <p id="account">Not signed in</p>
-    <p id="availability" class="muted">Grove is not ready for Print plate.</p>
-    <p class="muted">Sign in with a Grove user account. Upload permission is checked when Orca sends the plate.</p>
+    <p id="account"></p>
+    <p id="availability" class="muted">Loading Grove…</p>
   </section>
-
-  <details>
-    <summary>Orca connection diagnostics</summary>
-    <p class="muted">After a Send timeout, copy this information to report where the connection stopped.</p>
-    <textarea id="agent-diagnostics" rows="14" readonly aria-label="Orca connection diagnostics"></textarea>
-  </details>
 
   <section>
     <h2>Activity</h2>
@@ -58,10 +53,26 @@
     <p id="receipt" role="status" aria-live="polite"></p>
   </section>
 
+  <details>
+    <summary>Orca connection diagnostics</summary>
+    <p class="muted">After a Send timeout, copy this information to report where the connection stopped.</p>
+    <textarea id="agent-diagnostics" rows="14" readonly aria-label="Orca connection diagnostics"></textarea>
+  </details>
+</main>
+
   <script>
     const url = document.getElementById('grove-url');
     let state = {};
     function send(type, data = {}) { window.orca.postMessage({type, ...data}); }
+    function nextStep(data) {
+      if (data.unavailable) return 'Grove setup is unavailable.';
+      if (data.busy) return 'Grove is working…';
+      if (!data.grove_url) return 'Enter and save your Grove server URL.';
+      if (!data.account) return 'Sign in with your Grove account.';
+      if (!data.connection_verified) return 'Use Check connection to reconnect to Grove.';
+      if (!data.orca_connected) return 'Select a Grove Queue preset and choose Grove Queue in Orca’s Device tab.';
+      return 'Ready for Print plate.';
+    }
     function render(data) {
       state = data;
       document.getElementById('plugin-version').textContent = `Plugin ${data.plugin_version || 'unknown'}`;
@@ -73,18 +84,17 @@
         }, null, 2);
       }
       if (document.activeElement !== url) url.value = data.grove_url || '';
-      url.disabled = !!data.busy;
-      document.getElementById('save').disabled = !!data.busy;
-      document.getElementById('sign-in').disabled = !!data.busy || !data.grove_url || !!data.account;
-      document.getElementById('sign-out').disabled = !!data.busy || !data.account;
-      document.getElementById('check').disabled = !!data.busy || !data.account;
+      const blocked = !!data.busy || !!data.unavailable;
+      url.disabled = blocked;
+      document.getElementById('save').disabled = blocked;
+      document.getElementById('sign-in').disabled = blocked || !data.grove_url || !!data.account;
+      document.getElementById('sign-out').disabled = blocked || !data.account;
+      document.getElementById('check').disabled = blocked || !data.account;
       document.getElementById('account').textContent = data.account
         ? `Signed in as ${data.account.username}` : 'Not signed in';
       const availability = document.getElementById('availability');
-      availability.textContent = data.ready_for_print
-        ? 'Grove is connected and ready for Print plate.'
-        : 'Grove is not ready for Print plate. Save the URL, sign in, and check the connection.';
-      availability.className = data.ready_for_print ? 'ready' : 'muted';
+      availability.textContent = nextStep(data);
+      availability.className = data.ready_for_print && data.orca_connected ? 'ready' : 'muted';
       document.getElementById('status').textContent = data.message || '';
       const result = data.last_submission;
       document.getElementById('receipt').textContent = result
@@ -111,7 +121,11 @@
       if (data.type === 'notice') document.getElementById('status').textContent = data.message;
     });
     send('ready');
-    window.setInterval(() => send('refresh'), 2000);
+    function refreshIfVisible() {
+      if (!document.hidden) send('refresh');
+    }
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    window.setInterval(refreshIfVisible, 2000);
   </script>
 </body>
 </html>

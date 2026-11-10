@@ -1,4 +1,4 @@
-"""Orca Script and PrinterAgent capabilities for Grove Control."""
+"""Orca Pages, Script, and PrinterAgent capabilities for Grove Control."""
 
 from __future__ import annotations
 
@@ -43,11 +43,15 @@ def _current_runtime() -> Runtime | None:
         return _runtime
 
 
+def _connection_html() -> str:
+    return files("grove_control_orca_plugin").joinpath("resources/connection.html").read_text("utf-8")
+
+
 def connection_state() -> dict:
     """Return public connection state without credentials or local paths."""
     runtime = _current_runtime()
     if runtime is None:
-        raise GroveError("Open the Grove Control panel from Orca's Plugins window first.")
+        raise GroveError("Open Grove in Orca to set up the connection first.")
     return runtime.snapshot()
 
 
@@ -62,7 +66,7 @@ def submit_sliced_job(
     """Submit the archive passed to Orca's native PrinterAgent callback."""
     runtime = _current_runtime()
     if runtime is None:
-        raise GroveError("Open the Grove Control panel and connect to Grove before printing.")
+        raise GroveError("Open Grove in Orca and connect before printing.")
     return runtime.submit_job(SlicedJob.from_native(Path(path), filename, plate_id), progress, cancelled)
 
 
@@ -71,6 +75,8 @@ def register_plugin(orca):
     global _active_agent
 
     pa = orca.printer_agent
+    pages_base = getattr(getattr(orca, "pages", None), "PagesPluginCapabilityBase", None)
+    active_page = None
 
     class GroveQueueAgent(pa.PrinterAgentBase):
         """LAN compatibility adapter that hands Orca's sliced archive to Grove."""
@@ -432,7 +438,7 @@ def register_plugin(orca):
                     update_fn,
                     7,
                     -1,
-                    "Open the Grove Control panel, sign in, and verify the Grove connection before sending.",
+                    "Open Grove in Orca, sign in, and verify the connection before sending.",
                 )
                 return -1
             return -7010
@@ -468,7 +474,7 @@ def register_plugin(orca):
                     update_fn,
                     7,
                     -1,
-                    "Connect and sign in to Grove in the Grove Control panel before printing.",
+                    "Open Grove in Orca and check the connection before printing.",
                 )
                 return -1
             with self._guard:
@@ -627,9 +633,7 @@ def register_plugin(orca):
                 self._panel.show()
                 return orca.ExecutionResult.success("Grove Control panel is open.")
             self._panel = orca.host.ui.create_dock_panel(
-                html=files("grove_control_orca_plugin")
-                .joinpath("resources/connection.html")
-                .read_text("utf-8"),
+                html=_connection_html(),
                 title="Grove Control",
                 width=360,
                 height=440,
@@ -765,21 +769,40 @@ def register_plugin(orca):
                 agent = _active_agent
             if agent is not None:
                 agent.refresh_availability()
+            self._post_state(state)
+
+        def _post_state(self, state):
+            with _state_lock:
+                agent = _active_agent
+            diagnostics = agent.diagnostics() if agent is not None else None
+            orca_connected = bool(
+                diagnostics
+                and diagnostics["adapter_connected"]
+                and "queue_on_main" in diagnostics["callbacks_registered"]
+            )
+            self._post_to_views(
+                {
+                    "type": "state",
+                    **state,
+                    "plugin_version": __version__,
+                    "agent_diagnostics": diagnostics,
+                    "orca_connected": orca_connected,
+                }
+            )
+
+        def _post_to_views(self, data):
+            if self._unloaded:
+                return
+            with _state_lock:
+                page = active_page
+            if page is not None:
+                page.post_message(data)
             panel = self._panel
-            if not self._unloaded and panel is not None and panel.is_open():
-                panel.post(
-                    {
-                        "type": "state",
-                        **state,
-                        "plugin_version": __version__,
-                        "agent_diagnostics": agent.diagnostics() if agent is not None else None,
-                    }
-                )
+            if panel is not None and panel.is_open():
+                panel.post(data)
 
         def _notice(self, message):
-            panel = self._panel
-            if not self._unloaded and panel is not None and panel.is_open():
-                panel.post({"type": "notice", "message": message})
+            self._post_to_views({"type": "notice", "message": message})
 
         def _work(self, action):
             if not self._worker_lock.acquire(blocking=False):
@@ -792,7 +815,7 @@ def register_plugin(orca):
                 except GroveError as exc:
                     self._notice(str(exc))
                 except Exception:
-                    self._notice("The Grove action could not complete. Reopen the panel and try again.")
+                    self._notice("The Grove action could not complete. Reopen Grove in Orca and try again.")
                 finally:
                     self._worker_lock.release()
 
@@ -814,12 +837,14 @@ def register_plugin(orca):
                 if runtime is None:
                     self.on_load()
                     runtime = self._runtime
-                if data.get("type") in ("ready", "refresh"):
-                    state = runtime.snapshot()
-                    self._state_changed(state)
+                kind = data.get("type")
+                if kind in ("ready", "refresh"):
+                    if kind == "ready":
+                        self._start_startup_sign_in()
+                    self._post_state(runtime.snapshot())
                     if runtime.connection_check_due():
                         self._work(runtime.check_connection)
-                elif data.get("type") == "configure":
+                elif kind == "configure":
                     url = data.get("grove_url")
                     if not isinstance(url, str):
                         raise GroveError("Enter a Grove URL.")
@@ -827,18 +852,18 @@ def register_plugin(orca):
                         url,
                         lambda value: self.save_config(json.dumps({"grove_url": value})),
                     )
-                elif data.get("type") == "sign_in":
+                elif kind == "sign_in":
                     self._invoke_audited(runtime.prepare_access)
                     self._work(runtime.sign_in)
-                elif data.get("type") == "sign_out":
+                elif kind == "sign_out":
                     self._work(runtime.sign_out)
-                elif data.get("type") == "check_connection":
+                elif kind == "check_connection":
                     self._invoke_audited(runtime.prepare_access)
                     self._work(runtime.check_connection)
             except PermissionError:
                 self._notice("Orca denied a permission. Allow the plugin permission and try again.")
             except (ValueError, GroveError) as exc:
-                notice = str(exc) if isinstance(exc, GroveError) else "Orca sent an invalid panel message."
+                notice = str(exc) if isinstance(exc, GroveError) else "Orca sent an invalid Grove message."
                 self._notice(notice)
 
         def on_unload(self):
@@ -854,10 +879,49 @@ def register_plugin(orca):
                 if _active_script is self:
                     _active_script = None
 
+    if pages_base is not None:
+
+        class GroveControlPage(pages_base):
+            def get_name(self):
+                return "Grove"
+
+            def get_ui(self):
+                return _connection_html()
+
+            def on_load(self):
+                nonlocal active_page
+                with _state_lock:
+                    active_page = self
+
+            def on_unload(self):
+                nonlocal active_page
+                with _state_lock:
+                    if active_page is self:
+                        active_page = None
+
+            def on_message(self, data):
+                with _state_lock:
+                    if active_page is not self:
+                        return
+                    script = _active_script
+                if script is not None:
+                    script.on_message(data)
+                else:
+                    self.post_message(
+                        {
+                            "type": "state",
+                            "plugin_version": __version__,
+                            "unavailable": True,
+                            "message": "Enable the Grove Control script in Orca’s Plugins window.",
+                        }
+                    )
+
     @orca.plugin
     class GroveControlPlugin(orca.base):
         def register_capabilities(self):
             orca.register_capability(GroveControlScript)
             orca.register_capability(GroveQueueAgent)
+            if pages_base is not None:
+                orca.register_capability(GroveControlPage)
 
     return GroveControlPlugin

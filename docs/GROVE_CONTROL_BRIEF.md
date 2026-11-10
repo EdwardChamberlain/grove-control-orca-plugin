@@ -38,7 +38,7 @@ Print-modal changes reach the plugin automatically.
    framing policy. Preserve the other CSP directives. No global CORS relaxation
    is needed: the embedded application calls Grove's own origin.
 
-The plugin's dock panel is configuration-only. Its native PrinterAgent callback
+The plugin's **Grove** tab handles connection setup and displays submission activity. Its native PrinterAgent callback
 uses `GET /api/v1/auth/status`, `GET /api/v1/auth/me`,
 `POST /api/v1/auth/logout` and `POST /api/v1/library/files?temporary=true`. Queue creation stays
 in Grove. Give print-mode document authentication an in-memory option so it does

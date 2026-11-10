@@ -44,7 +44,7 @@ class PackagingTests(unittest.TestCase):
                 self.assertIn("grove_control_orca_plugin/resources/connection.html", archive.namelist())
                 metadata = next(name for name in archive.namelist() if name.endswith("/METADATA"))
                 self.assertIn("Version: 2.3.4\n", archive.read(metadata).decode())
-            # An embedded Orca import registers the Script panel and PrinterAgent.
+            # An embedded Orca import registers the Pages tab, Script, and PrinterAgent.
             script = """
 import json, sys, types
 sys.path.insert(0, sys.argv[1])
@@ -53,11 +53,13 @@ class Capability:
     def get_config(self): return '{}'
     def save_config(self, value): return True
 class AgentBase: pass
+class PageBase: pass
 def decorate(cls):
     packages.append(cls)
     return cls
 orca = types.ModuleType('orca')
 orca.base = object
+orca.pages = types.SimpleNamespace(PagesPluginCapabilityBase=PageBase)
 orca.script = types.SimpleNamespace(ScriptPluginCapabilityBase=Capability)
 orca.printer_agent = types.SimpleNamespace(
     PrinterAgentBase=AgentBase,
@@ -70,14 +72,19 @@ sys.modules['orca'] = orca
 import grove_control_orca_plugin as plugin
 assert len(packages) == 1
 packages[0]().register_capabilities()
-assert len(capabilities) == 2
-page = capabilities[0]()
+assert len(capabilities) == 3
+script = capabilities[0]()
 agent = capabilities[1]()
+page = capabilities[2]()
+script.on_load()
 page.on_load()
-assert page.get_name() == 'Grove Control'
+assert script.get_name() == 'Grove Control'
+assert page.get_name() == 'Grove'
+assert '<title>Grove Control</title>' in page.get_ui()
 assert agent.get_agent_info().id == 'grove-control-queue'
 assert plugin.connection_state()['ready_for_print'] is False
 page.on_unload()
+script.on_unload()
 agent.on_unload()
 print(json.dumps({'version': plugin.__version__}))
 """
