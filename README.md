@@ -59,7 +59,7 @@ If a permission is denied, the error explicitly identifies Orca's permission blo
 - Orca's printer-only options are not forwarded as physical-printer commands. Configure the actual destination and job options in Grove's form.
 - Grove does not currently expose a separate upload-permission preflight; the upload response is authoritative.
 - A partial receipt includes the queue IDs Grove confirmed. Check Grove before taking further action.
-- Cancelling after upload leaves the file in Grove's File Manager.
+- On Grove servers with Temporary Files, Orca uploads go into that folder. Grove removes them after dispatch when no queued job still needs them. Cancelling leaves the file available there until Grove's configured retention period expires. Move it to another folder to keep it.
 - Closing the Grove form without a receipt, invalid receipts, and interrupted submissions are uncertain. Check Grove's queue before manually trying again.
 - Orca issue [#16565](https://github.com/OrcaSlicer/OrcaSlicer/issues/16565) reports the printer selector popup obscured or clipped on macOS and Windows. LAN eligibility is separate from that rendering symptom; the populated selector still needs to be explicitly opened and tested.
 - Automated validation does not submit jobs. Use an authorized test destination for live queue tests.

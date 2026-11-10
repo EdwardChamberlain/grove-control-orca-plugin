@@ -124,7 +124,7 @@ class GroveClient:
                 headers["Content-Length"] = str(len(prefix) + initial.st_size + len(suffix))
                 if cancelled():
                     raise Cancelled("Upload cancelled.")
-                connection.putrequest("POST", self._path("/library/files"))
+                connection.putrequest("POST", self._path("/library/files?temporary=true"))
                 for name, value in headers.items():
                     connection.putheader(name, value)
                 connection.endheaders()
