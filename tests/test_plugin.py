@@ -5,6 +5,7 @@ import types
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from grove_control_orca_plugin import plugin
 from grove_control_orca_plugin.models import (
@@ -113,31 +114,62 @@ class PluginTests(unittest.TestCase):
         self.assertFalse(hasattr(self.agent, "execute_slicing_pipeline"))
         self.assertIs(plugin._active_agent, self.agent)
 
-    def test_startup_attempts_grove_sign_in_when_server_url_is_saved(self):
+    def test_startup_prepares_access_and_dispatches_sign_in_from_audited_ui_callback(self):
         script = self.capabilities[0]()
         script.saved = {"grove_url": "https://grove.example"}
-        actions = []
-        previous_runtime = plugin._runtime
-        self.addCleanup(setattr, plugin, "_runtime", previous_runtime)
         self.addCleanup(script.on_unload)
+        queue, steps = [], []
+        ui_thread = threading.get_ident()
 
-        script.on_load()
-        self.agent.set_queue_on_main_fn(actions.append)
+        def prepare_access(_runtime):
+            steps.append(("prepare", ScriptCapability.audit_scope.active, threading.get_ident()))
 
-        self.assertEqual(len(actions), 1)
-        self.assertEqual(actions[0].__name__, "_start_startup_sign_in")
-        self.assertIs(actions[0].__self__, script)
-        self.assertEqual(script._runtime.snapshot()["grove_url"], "https://grove.example")
+        def start_work(_action):
+            steps.append(("start", ScriptCapability.audit_scope.active, threading.get_ident()))
+
+        with (
+            patch.object(plugin.Runtime, "prepare_access", prepare_access),
+            patch.object(script, "_work", side_effect=start_work) as work,
+        ):
+            script.on_load()
+            self.agent.set_queue_on_main_fn(queue.append)
+
+            self.assertEqual(steps, [])
+            self.assertEqual(len(queue), 1)
+            queue[0]()
+            work.assert_called_once_with(script._runtime.sign_in)
+
+        self.assertEqual(steps, [("prepare", True, ui_thread), ("start", True, ui_thread)])
+
+    def test_startup_thread_permission_denial_leaves_manual_sign_in_available(self):
+        script = self.capabilities[0]()
+        script.saved = {"grove_url": "https://grove.example"}
+        self.addCleanup(script.on_unload)
+        queue = []
+
+        with (
+            patch.object(plugin.Runtime, "prepare_access") as prepare,
+            patch.object(threading.Thread, "start", side_effect=PermissionError) as start,
+        ):
+            script.on_load()
+            self.agent.set_queue_on_main_fn(queue.append)
+            self.assertEqual(len(queue), 1)
+            queue[0]()
+            prepare.assert_called_once_with()
+            start.assert_called_once_with()
+
+        self.assertFalse(script._worker_lock.locked())
+        self.assertIn("sign in manually", script._runtime.snapshot()["message"])
 
     def test_startup_does_not_open_grove_sign_in_without_saved_server_url(self):
         script = self.capabilities[0]()
-        actions = []
-        script._work = actions.append
+        queue = []
         self.addCleanup(script.on_unload)
 
         script.on_load()
+        self.agent.set_queue_on_main_fn(queue.append)
 
-        self.assertEqual(actions, [])
+        self.assertEqual(queue, [])
 
     def test_panel_is_connection_configuration_only(self):
         html = (Path(plugin.__file__).parent / "resources" / "connection.html").read_text("utf-8")
