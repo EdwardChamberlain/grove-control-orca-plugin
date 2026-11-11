@@ -293,18 +293,23 @@ class Runtime:
                 raise Cancelled("Submission cancelled. The uploaded file remains in Grove.")
             self._publish("Choose a destination and print options in Grove.")
             self._report_progress(Progress("configuring"), progress)
+
+            def verify_print_session(token: str) -> None:
+                if client.account(token) != session.account:
+                    raise AuthenticationRequired("Sign in to Grove with the same account used in Orca.")
+
             exchange = self._exchange_factory(
                 self._host,
                 url,
                 "print",
                 {
-                    "access_token": session.token,
                     "expected_user_id": session.account.id,
                     "library_file_id": file_id,
                     "filename": job.filename,
                     "plate_id": job.plate_id,
                 },
                 cancel,
+                verify_print_session=verify_print_session,
             )
             self._exchange = exchange
             event = exchange.run()

@@ -80,8 +80,9 @@ class RuntimeTests(unittest.TestCase):
         self.events = [{"type": "authenticated", "access_token": "user-session-secret"}]
         self.exchanges = []
 
-        def exchange_factory(host, url, mode, initialization, cancelled):
+        def exchange_factory(host, url, mode, initialization, cancelled, **kwargs):
             exchange = FakeExchange(self.events.pop(0), initialization)
+            exchange.verify_print_session = kwargs.get("verify_print_session")
             self.exchanges.append(exchange)
             return exchange
 
@@ -124,8 +125,17 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(initialization["plate_id"], 2)
         self.assertEqual(initialization["library_file_id"], 42)
         self.assertNotIn("printer_id", initialization)
+        self.assertNotIn("access_token", initialization)
+        self.exchanges[-1].verify_print_session("browser-session-token")
         self.assertEqual(len(self.client.uploads), 1)
         self.assertEqual(phases, ["validating", "uploading", "uploading", "configuring"])
+
+    def test_print_browser_session_must_match_the_upload_account(self):
+        self.receipt()
+        self.runtime.submit_job(self.job)
+        self.client.user = Account(8, "bob")
+        with self.assertRaisesRegex(AuthenticationRequired, "same account"):
+            self.exchanges[-1].verify_print_session("other-user-token")
 
     def test_native_upload_name_and_selected_plate_reach_the_grove_form(self):
         path = self.path.with_name(".52871.0.3mf")

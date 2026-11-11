@@ -31,20 +31,29 @@ through `window.orca.postMessage(payload)` and receives initialization with
 `window.orca.onMessage(handler)`. Normal login/SSO navigation must preserve the
 integration return URL and request ID. This mode receives no session token.
 
-**Print** loads Grove in an iframe inside a small local Orca page. Grove sends
-messages with `window.parent.postMessage(payload, '*')`; the parent has a file
-origin, so a normal web origin cannot be used as the target. Only receipts and
-control messages are sent this way. Grove receives initialization with a browser
-`message` listener that requires `event.source === window.parent`, then validates
-the protocol version and request ID. Register that listener before sending ready.
+**Print** adds `transport=native` and navigates the whole modal webview to Grove.
+It uses the same native bridge as Connect, so IIS `X-Frame-Options` and CSP
+`frame-ancestors` headers can stay enabled. No iframe or additional port is used.
+This requires the matching Grove frontend update; an older page times out with
+an instruction to update the Grove-side integration.
 
-The local parent forwards a frame event to Python only if both its browser-
-reported origin and source match the configured Grove origin and that iframe.
-Python initialization is forwarded using `postMessage(payload, groveOrigin)`.
-A redirected or unrelated frame cannot receive the user's token. This policy is
-needed because Orca's host-window message callback does not expose a trusted
-browser sender origin. Grove must allow a `file:` parent for **print mode on this route only**;
-its normal pages and connect flow retain their existing framing policy.
+Orca's native callback does not expose a trusted sender origin. The plugin
+therefore never sends a token into the page. The page first sends
+`ready` with `mode: "connect"`, receives `initialize` with `mode: "connect"`,
+and uses its normal browser login, including MFA/SSO when necessary. It sends
+`authenticated` with its own user JWT. The plugin verifies that JWT against
+the configured Grove server and requires the account that uploaded the file.
+Grove registers its print receiver and sends `ready` with `mode: "print"`.
+Only after account verification does the plugin send file initialization.
+
+Every native Print terminal event includes `access_token` matching that verified
+browser session. The plugin compares it before accepting the event and removes
+it from the result. A redirected page cannot obtain the token from native or
+forge a successful receipt. Reloading begins the authentication exchange again.
+
+For older plugins, Grove still supports the original iframe transport when
+`transport` is absent: origin/source-checked `window.parent.postMessage` and
+token-bearing initialization. IIS may block that older transport.
 
 ## Connection exchange
 
@@ -71,12 +80,12 @@ changing an established session. Passwords and MFA answers never enter Python.
 The plugin first verifies `/auth/status` and `/auth/me`, then uploads with
 `POST /api/v1/library/files?temporary=true`, using `Authorization: Bearer <same user JWT>`.
 Grove manages the uploaded file through its Temporary Files retention and dispatch rules.
-After Grove sends `ready`, the plugin responds:
+After the native browser-session exchange above, the plugin responds:
 
 ```json
 {
   "type":"initialize", "protocol_version":1, "request_id":"...", "mode":"print",
-  "access_token":"<user JWT>", "expected_user_id":7,
+  "expected_user_id":7,
   "library_file_id":42, "filename":"bracket.gcode.3mf", "plate_id":1
 }
 ```
@@ -84,18 +93,19 @@ After Grove sends `ready`, the plugin responds:
 `plate_id` is a positive 1-based initial selection or `null`. Treat the filename
 as display context; Grove loads and authorizes the file by its library ID.
 
-Grove must use the supplied token in memory for this document, validate it with
+Grove must use its verified browser token in memory for this document, validate it with
 `/auth/me`, compare the actual account ID with `expected_user_id`, then mount its
-existing full Print modal. Do not silently reuse another browser account, save
-the supplied token in browser storage, or open a new login within a print flow.
-Report `session_expired` and return the user to the separate connection flow.
+existing full Print modal. Do not silently reuse another browser account or
+persist a token received from native. Login, when needed, finishes before file
+initialization; an expired session after initialization reports `session_expired`.
 
 After all intended queue requests are confirmed, Grove sends:
 
 ```json
 {
   "type":"submitted", "protocol_version":1, "request_id":"...",
-  "user_id":7, "library_file_id":42, "queue_item_ids":[101,102]
+  "user_id":7, "library_file_id":42, "queue_item_ids":[101,102],
+  "access_token":"<verified browser JWT>"
 }
 ```
 
