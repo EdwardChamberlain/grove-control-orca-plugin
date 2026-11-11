@@ -26,6 +26,12 @@ The PrinterAgent workflow is experimental and off by default in Orca. This LAN a
 
 The adapter advertises `127.0.0.1:49381` itself. No host or port field needs to be entered in **Basic information**; the earlier setup instructions incorrectly placed those fields there. Orca may ask for metadata before calling the connection callback, so the adapter answers those read-only requests immediately while retaining Grove authentication checks for uploads.
 
+### IIS and other reverse proxies
+
+The Print form opens directly in Orca's modal webview at the saved Grove URL, using its normal HTTP/HTTPS port. It does not need an extra server port or an iframe exception in IIS. Keep `X-Frame-Options` and CSP framing protections enabled.
+
+This requires the matching Grove frontend with support for `transport=native`; install that update before replacing the plugin. Older plugins retain their existing iframe flow. The native Print window uses Grove's normal browser session and may ask you to sign in if that window has no remembered session. Use the same account connected in Orca. The plugin checks the account before releasing file details and never sends its access token into the page.
+
 To replace an earlier local build, install the new `.whl` from **Plugins → Install local plugin**, confirm **Overwrite**, then restart Orca so it reloads the package. The plugin version may stay the same for local builds from a checkout without Git tags.
 
 After installing a replacement, restart Orca and check the loaded version in the panel. When a server URL is saved, startup sign-in is queued through Orca's UI dispatcher once the Grove LAN agent attaches. If no Grove preset is active yet, opening the Grove Control panel triggers the same attempt. If Grove's browser session is no longer active, sign in through the Grove window; use **Check connection** before sending if needed. Orca may ask for network and background-thread permissions after replacement. The panel displays the loaded version; **0.1.3** corrects permission handling, **0.1.4** corrects native temporary-archive naming, **0.1.5** requests a modal Print window so it can be used above Orca's modal Send dialog, **0.1.6** adds startup sign-in attempts, and **0.1.7** defers startup sign-in until Orca's UI dispatcher is available.
@@ -68,7 +74,7 @@ The Grove-side hosted login and Print form bridge, along with receipt changes, a
 
 ## Development
 
-Install Node.js to run the JavaScript bridge test. Pull requests to `main` require the **Required CI** check, which runs the tests on Linux, macOS, and Windows and checks lint, formatting, and packaging on Linux.
+Pull requests to `main` require the **Required CI** check, which runs the tests on Linux, macOS, and Windows and checks lint, formatting, and packaging on Linux. The matching Grove frontend includes the browser regression for restrictive proxy headers.
 
 ```sh
 python3 -m venv .venv

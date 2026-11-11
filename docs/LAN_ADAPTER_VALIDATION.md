@@ -1,5 +1,23 @@
 # LAN adapter validation report
 
+## Native Print transport behind IIS (2026-11-11)
+
+- A reported Print-page connection error after successful sign-in is consistent
+  with IIS rejecting the old iframe. The actual server's response headers were
+  not inspected, so its specific cause is not confirmed.
+- Print now opens the saved Grove URL directly in the modal webview with
+  `transport=native`. The matching Grove frontend supports the native bridge
+  while retaining the iframe transport for older plugins.
+- The browser signs in normally. The plugin validates its account against
+  Grove before sending file details, never sends a token into the document,
+  and checks the verified browser token on every terminal receipt. Existing
+  file/account matching, cancellation, and no-retry behavior remain in place.
+- A Playwright test opens the actual Grove Print form with mocked APIs and
+  `X-Frame-Options: SAMEORIGIN` plus CSP `frame-ancestors 'none'`, confirms there
+  is no iframe, and cancels with no queue POST. No real login or job was sent.
+- The user's IIS server and native Orca webview still need a live retry after
+  installing both updates. The sections below describe earlier builds.
+
 **Status (2026-10-17):** the user reports that Grove's modal Print form now works and accepts the job. Orca's native **Send print job** dialog remains open after Grove confirms queue creation. Plugin inspection shows it returns `0` after validating Grove's matching receipt; live Orca logs are needed to determine whether Orca receives that return and processes its dialog-close event.
 
 ## Implemented

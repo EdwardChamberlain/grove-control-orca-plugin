@@ -31,12 +31,14 @@ Print-modal changes reach the plugin automatically.
    success or an uncertain outcome. Its existing `onSuccess`/`onClose` behavior
    for other callers can remain compatible. The integration page emits a
    matching user/file receipt; it never retries accepted requests automatically.
-5. **Allow framing only for the integration Print page.** Orca hosts this page
-   in an origin-checked iframe whose parent has a `file:` origin. Add that parent
-   scheme to this route's `frame-ancestors` policy in print mode and omit its
-   conflicting `X-Frame-Options` header. Keep the normal site and connect-mode
-   framing policy. Preserve the other CSP directives. No global CORS relaxation
-   is needed: the embedded application calls Grove's own origin.
+5. **Support the native Print transport behind reverse proxies.** With
+   `transport=native`, Orca navigates its whole modal webview to Grove. Reuse the
+   normal Connect login before initializing Print, return the browser JWT to
+   native for account verification, and authenticate every terminal event with
+   that JWT. Native never sends a token into this document. Keep the existing
+   iframe flow for older plugins without `transport`. IIS framing headers and
+   the normal site protections do not need to change for native mode. See
+   [the bridge protocol](BRIDGE_PROTOCOL.md) for message ordering.
 
 The plugin's dock panel is configuration-only. Its native PrinterAgent callback
 uses `GET /api/v1/auth/status`, `GET /api/v1/auth/me`,
